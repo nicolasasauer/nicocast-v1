@@ -83,8 +83,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     },
     "display": {
         # Video output sink: auto | kmssink | fbdevsink | ximagesink | fakesink
-        # "auto" lets GStreamer choose the best available sink.
-        "video_sink": "auto",
+        # "kmssink" is recommended for Raspberry Pi OS Lite (no desktop).
+        # "auto" lets GStreamer choose; use it if you run a desktop environment.
+        "video_sink": "kmssink",
         # Force full-screen output (true/false)
         "fullscreen": "true",
         # Audio output: auto | hdmi | headphone | disabled

@@ -6,10 +6,15 @@
 #   1. Backs up the existing wpa_supplicant.conf
 #   2. Writes a new config that enables P2P with WFD subelements
 #   3. Restarts wpa_supplicant
+#
+# Parameters:
+#   $1  – wireless interface (default: wlan0)
+#   $2  – Wi-Fi country code  (default: $WIFI_COUNTRY env var, then DE)
 # =============================================================================
 set -euo pipefail
 
 IFACE="${1:-wlan0}"
+COUNTRY="${2:-${WIFI_COUNTRY:-DE}}"
 WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
 WPA_P2P_CONF="/etc/wpa_supplicant/wpa_supplicant-p2p.conf"
 WPA_SERVICE="wpa_supplicant@${IFACE}"
@@ -28,12 +33,12 @@ if [[ -f "${WPA_CONF}" ]]; then
 fi
 
 # ─── Write new P2P-capable wpa_supplicant config ─────────────────────────────
-info "Writing wpa_supplicant P2P config to ${WPA_P2P_CONF}…"
-cat > "${WPA_P2P_CONF}" <<'WPAEOF'
+info "Writing wpa_supplicant P2P config to ${WPA_P2P_CONF} (country: ${COUNTRY})…"
+cat > "${WPA_P2P_CONF}" <<WPAEOF
 # wpa_supplicant configuration for NicoCast (Wi-Fi Direct P2P + WFD Miracast)
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
-country=DE
+country=${COUNTRY}
 
 # ── Device identification ──────────────────────────────────────────────────
 # Device name shown to source devices (overridden at runtime by NicoCast)
