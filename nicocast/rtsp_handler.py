@@ -145,7 +145,7 @@ class RTSPSession:
         except ConnectionResetError:
             logger.info("RTSP connection reset by %s", self.addr)
         except Exception as exc:
-            logger.error("RTSP session error: %s", exc)
+            logger.error("RTSP session error: %s", exc, exc_info=True)
         finally:
             self._teardown()
 
@@ -301,7 +301,7 @@ class RTSPSession:
                     self.negotiated_audio_codecs,
                 )
             except Exception as exc:
-                logger.error("on_session_start callback error: %s", exc)
+                logger.error("on_session_start callback error: %s", exc, exc_info=True)
 
     def _handle_pause(self, req: dict) -> None:
         self._send_response(
@@ -324,7 +324,7 @@ class RTSPSession:
             try:
                 self.on_end(self)
             except Exception as exc:
-                logger.error("on_session_end callback error: %s", exc)
+                logger.error("on_session_end callback error: %s", exc, exc_info=True)
         try:
             self.conn.close()
         except Exception:
