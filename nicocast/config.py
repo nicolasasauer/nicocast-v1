@@ -34,6 +34,12 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "connection_method": "pbc",
         # Log level: DEBUG | INFO | WARNING | ERROR
         "log_level": "INFO",
+        # Path to the persistent log file (empty = file logging disabled)
+        "log_file": "/var/log/nicocast/nicocast.log",
+        # Maximum size of a single log file in bytes before rotation (default 5 MB)
+        "log_max_bytes": "5242880",
+        # Number of rotated log files to keep
+        "log_backup_count": "5",
     },
     "wifi": {
         # Physical wireless interface used for P2P

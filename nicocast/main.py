@@ -16,6 +16,8 @@ Or via the installed entry point:
 
 import argparse
 import logging
+import logging.handlers
+import os
 import signal
 import sys
 import threading
@@ -28,13 +30,39 @@ from .display_pipeline import DisplayPipeline
 from .web_ui import WebUI
 
 
-def _setup_logging(level_str: str) -> None:
+def _setup_logging(level_str: str, log_file: str = "", max_bytes: int = 5242880, backup_count: int = 5) -> None:
     level = getattr(logging, level_str.upper(), logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    fmt = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+
+    # Console handler (stderr) – always active
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+
+    handlers: list[logging.Handler] = [console_handler]
+
+    # Persistent rotating file handler – active when log_file is configured
+    if log_file:
+        try:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+            handlers.append(file_handler)
+        except OSError as exc:
+            # Log the warning via the console handler that is already set up
+            logging.basicConfig(level=level, format=fmt, datefmt=datefmt)
+            logging.getLogger(__name__).warning(
+                "Could not open log file '%s': %s – file logging disabled",
+                log_file, exc,
+            )
+            return
+
+    logging.basicConfig(level=level, handlers=handlers, format=fmt, datefmt=datefmt)
 
 
 class NicoCast:
@@ -66,7 +94,10 @@ class NicoCast:
     def start(self) -> None:
         """Start all subsystems."""
         log_level = self.config.get("general", "log_level")
-        _setup_logging(log_level)
+        log_file = self.config.get("general", "log_file")
+        log_max_bytes = self.config.getint("general", "log_max_bytes")
+        log_backup_count = self.config.getint("general", "log_backup_count")
+        _setup_logging(log_level, log_file, log_max_bytes, log_backup_count)
         logger = logging.getLogger(__name__)
 
         device_name = self.config.get("general", "device_name")

@@ -111,7 +111,7 @@ class WebUI:
             try:
                 config.save()
             except Exception as exc:
-                logger.error("Failed to save config: %s", exc)
+                logger.error("Failed to save config: %s", exc, exc_info=True)
 
             return redirect(url_for("index"))
 

@@ -255,7 +255,7 @@ class WiFiP2P:
             try:
                 cb(event)
             except Exception as exc:
-                logger.error("Event callback error: %s", exc)
+                logger.error("Event callback error: %s", exc, exc_info=True)
 
     def _handle_group_started(self, event: str) -> None:
         """Parse P2P-GROUP-STARTED event and configure the new interface."""
