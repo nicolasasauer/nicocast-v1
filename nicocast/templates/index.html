@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NicoCast – Einstellungen</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { color: #888; margin-top: 0.25rem; font-size: 0.95rem; }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2d2d2d;
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 1.25rem;
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #2d2d2d;
+    }
+
+    /* Status indicators */
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0;
+      font-size: 0.9rem;
+    }
+    .status-row .label { color: #888; }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-green  { background: #14532d; color: #4ade80; }
+    .badge-yellow { background: #713f12; color: #fbbf24; }
+    .badge-gray   { background: #27272a; color: #9ca3af; }
+
+    /* Form elements */
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 0.3rem;
+    }
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      background: #0f0f0f;
+      border: 1px solid #3a3a3a;
+      border-radius: 7px;
+      color: #e8e8e8;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus,
+    .form-group select:focus { border-color: #6366f1; }
+    .form-group small { display: block; color: #666; font-size: 0.75rem; margin-top: 0.25rem; }
+
+    .btn {
+      display: inline-block;
+      padding: 0.55rem 1.25rem;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-danger  { background: #7f1d1d; color: #fca5a5; }
+    .btn-block   { width: 100%; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #555;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎬 NicoCast</h1>
+  <p>Miracast-Sink für Raspberry Pi Zero 2W</p>
+</header>
+
+<!-- ── Status card ───────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Status</h2>
+
+  <div class="status-row">
+    <span class="label">Verbindung</span>
+    {% if status.get("connected") %}
+      <span class="badge badge-green">Verbunden</span>
+    {% else %}
+      <span class="badge badge-gray">Wartend…</span>
+    {% endif %}
+  </div>
+
+  {% if status.get("peer_ip") %}
+  <div class="status-row">
+    <span class="label">Gerät-IP</span>
+    <span>{{ status.peer_ip }}</span>
+  </div>
+  {% endif %}
+
+  {% if status.get("peer_mac") %}
+  <div class="status-row">
+    <span class="label">Gerät-MAC</span>
+    <span>{{ status.peer_mac }}</span>
+  </div>
+  {% endif %}
+
+  <div class="status-row">
+    <span class="label">Stream</span>
+    {% if status.get("streaming") %}
+      <span class="badge badge-green">Aktiv</span>
+    {% else %}
+      <span class="badge badge-gray">Inaktiv</span>
+    {% endif %}
+  </div>
+
+  <div class="status-row">
+    <span class="label">RTSP-Port</span>
+    <span>{{ cfg.miracast.rtsp_port }}</span>
+  </div>
+
+  <div class="status-row">
+    <span class="label">RTP-Port</span>
+    <span>{{ cfg.miracast.rtp_port }}</span>
+  </div>
+
+  <div class="status-row">
+    <span class="label">Gerätename</span>
+    <span>{{ cfg.general.device_name }}</span>
+  </div>
+</div>
+
+<!-- ── Settings card ─────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Einstellungen</h2>
+  <form method="POST" action="/settings">
+
+    <div class="form-group">
+      <label for="device_name">Gerätename (angezeigt auf Android)</label>
+      <input type="text" id="device_name" name="device_name"
+             value="{{ cfg.general.device_name }}"
+             maxlength="32" required>
+    </div>
+
+    <div class="form-group">
+      <label for="connection_method">Verbindungsmethode</label>
+      <select id="connection_method" name="connection_method">
+        <option value="pbc" {% if cfg.general.connection_method == "pbc" %}selected{% endif %}>
+          Kein PIN (Push-Button / PBC)
+        </option>
+        <option value="pin" {% if cfg.general.connection_method == "pin" %}selected{% endif %}>
+          PIN-Eingabe
+        </option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="pin">WPS-PIN (nur bei PIN-Methode)</label>
+      <input type="text" id="pin" name="pin"
+             value="{{ cfg.general.pin }}"
+             pattern="[0-9]{4}|[0-9]{8}" maxlength="8">
+      <small>4 oder 8 Ziffern</small>
+    </div>
+
+    <div class="form-group">
+      <label for="video_sink">Video-Ausgabe</label>
+      <select id="video_sink" name="video_sink">
+        <option value="auto"      {% if cfg.display.video_sink == "auto"      %}selected{% endif %}>Auto</option>
+        <option value="kmssink"   {% if cfg.display.video_sink == "kmssink"   %}selected{% endif %}>KMS/DRM (empfohlen für RPi)</option>
+        <option value="fbdevsink" {% if cfg.display.video_sink == "fbdevsink" %}selected{% endif %}>Framebuffer</option>
+        <option value="fakesink"  {% if cfg.display.video_sink == "fakesink"  %}selected{% endif %}>Fakesink (Test)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="audio_output">Audio-Ausgabe</label>
+      <select id="audio_output" name="audio_output">
+        <option value="hdmi"     {% if cfg.display.audio_output == "hdmi"     %}selected{% endif %}>HDMI</option>
+        <option value="headphone"{% if cfg.display.audio_output == "headphone"%}selected{% endif %}>Kopfhörer (3,5 mm)</option>
+        <option value="disabled" {% if cfg.display.audio_output == "disabled" %}selected{% endif %}>Deaktiviert</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="log_level">Log-Level</label>
+      <select id="log_level" name="log_level">
+        <option value="DEBUG"   {% if cfg.general.log_level == "DEBUG"   %}selected{% endif %}>DEBUG</option>
+        <option value="INFO"    {% if cfg.general.log_level == "INFO"    %}selected{% endif %}>INFO</option>
+        <option value="WARNING" {% if cfg.general.log_level == "WARNING" %}selected{% endif %}>WARNING</option>
+        <option value="ERROR"   {% if cfg.general.log_level == "ERROR"   %}selected{% endif %}>ERROR</option>
+      </select>
+    </div>
+
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary btn-block">
+        💾 Speichern
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ── Restart card ──────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Dienst</h2>
+  <p style="font-size:0.85rem;color:#888;margin-bottom:1rem;">
+    Nach dem Ändern des Gerätenamens muss der Dienst neu gestartet werden,
+    damit Android-Geräte den neuen Namen sehen.
+  </p>
+  <form method="POST" action="/restart">
+    <button type="submit" class="btn btn-danger btn-block">
+      🔄 Dienst neu starten
+    </button>
+  </form>
+</div>
+
+<footer>NicoCast v1.0 &nbsp;·&nbsp; Raspberry Pi Zero 2W</footer>
+
+</body>
+</html>
