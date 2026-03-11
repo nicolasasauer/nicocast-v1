@@ -54,6 +54,9 @@ class WiFiP2P:
         self.group_iface: str | None = None     # e.g. p2p-wlan0-0
         self.peer_ip: str | None = None         # IP assigned to peer
         self._dnsmasq_proc: subprocess.Popen | None = None
+        # Fallback-to-WiFi timer (fires if no Miracast device connects in time)
+        self._fallback_timer: threading.Timer | None = None
+        self._fallback_callbacks: list = []
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -82,12 +85,16 @@ class WiFiP2P:
         # Start P2P device discovery so peers can find us
         self._wpa_cli("P2P_FIND")
 
+        # Start the fallback timer (reconnect to saved WiFi if no device connects)
+        self._start_fallback_timer()
+
         logger.info("Wi-Fi Direct P2P started, advertising as '%s'", device_name)
 
     def stop(self) -> None:
         """Tear down P2P and clean up."""
         logger.info("Stopping Wi-Fi Direct P2P…")
         self._running = False
+        self._cancel_fallback_timer()
         self._wpa_cli("P2P_STOP_FIND")
         if self.group_iface:
             self._wpa_cli("P2P_GROUP_REMOVE", self.group_iface)
@@ -109,6 +116,13 @@ class WiFiP2P:
         The callback receives a single string argument (the event message).
         """
         self._event_callbacks.append(callback)
+
+    def on_fallback(self, callback) -> None:
+        """Register a callback invoked when the WiFi fallback timer fires.
+
+        The callback receives no arguments.
+        """
+        self._fallback_callbacks.append(callback)
 
     def accept_connection(self, peer_addr: str) -> bool:
         """Accept a P2P connection from *peer_addr* (MAC address).
@@ -239,6 +253,8 @@ class WiFiP2P:
             if len(parts) >= 2:
                 self.connected_peer = parts[1]
                 logger.info("Source device connected: %s", self.connected_peer)
+                # A device connected – cancel the fallback-to-WiFi timer
+                self._cancel_fallback_timer()
                 # Give DHCP a moment to assign an IP
                 threading.Thread(
                     target=self._wait_for_peer_ip, daemon=True
@@ -279,6 +295,58 @@ class WiFiP2P:
             threading.Thread(
                 target=self._wait_for_own_ip, args=(iface,), daemon=True
             ).start()
+
+    # ─── Fallback-to-WiFi timer ───────────────────────────────────────────────
+
+    def _start_fallback_timer(self) -> None:
+        """Start the one-shot fallback timer based on *wifi_fallback_timeout*."""
+        timeout = self.config.getint("wifi", "wifi_fallback_timeout")
+        if timeout <= 0:
+            logger.debug("WiFi fallback timer disabled (wifi_fallback_timeout=0)")
+            return
+        logger.info(
+            "WiFi fallback timer started – will reconnect to saved WiFi in %d s "
+            "if no Miracast device connects",
+            timeout,
+        )
+        self._fallback_timer = threading.Timer(timeout, self._on_fallback_timeout)
+        self._fallback_timer.daemon = True
+        self._fallback_timer.start()
+
+    def _cancel_fallback_timer(self) -> None:
+        """Cancel the fallback timer if it is still pending."""
+        if self._fallback_timer is not None:
+            self._fallback_timer.cancel()
+            self._fallback_timer = None
+            logger.debug("WiFi fallback timer cancelled")
+
+    def _on_fallback_timeout(self) -> None:
+        """Called by the timer when no Miracast device connected in time."""
+        self._fallback_timer = None
+        logger.warning(
+            "No Miracast device connected within the configured timeout – "
+            "falling back to saved Wi-Fi network"
+        )
+        self.reconnect_saved_wifi()
+        for cb in self._fallback_callbacks:
+            try:
+                cb()
+            except Exception as exc:
+                logger.error("Fallback callback error: %s", exc, exc_info=True)
+
+    def reconnect_saved_wifi(self) -> None:
+        """Stop P2P and reconnect wpa_supplicant to the saved Wi-Fi network."""
+        logger.info("Reconnecting to saved Wi-Fi network…")
+        self._wpa_cli("P2P_STOP_FIND")
+        if self.group_iface:
+            self._wpa_cli("P2P_GROUP_REMOVE", self.group_iface)
+        self._stop_dnsmasq()
+        # Reset WFD advertisement so we no longer appear as a Miracast sink
+        self._wpa_cli("SET", "wifi_display", "0")
+        # Ask wpa_supplicant to (re-)connect using its stored network profiles
+        self._wpa_cli("DISCONNECT")
+        self._wpa_cli("RECONNECT")
+        logger.info("Reconnect command sent – wpa_supplicant will now join saved network")
 
     # ─── Network helpers ──────────────────────────────────────────────────────
 

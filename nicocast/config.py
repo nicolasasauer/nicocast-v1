@@ -60,6 +60,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "channel": "6",
         # Maximum time (seconds) to wait for a P2P peer to appear
         "p2p_find_timeout": "120",
+        # Seconds after start to wait for a Miracast device before falling back
+        # to the saved Wi-Fi network (0 = disabled)
+        "wifi_fallback_timeout": "300",
     },
     "miracast": {
         # TCP port the RTSP server listens on (standard: 7236)
