@@ -1,5 +1,7 @@
 # NicoCast v1
 
+> **⚠️ Disclaimer:** Dieses Projekt wurde vollständig mit Hilfe von KI-Agenten (GitHub Copilot Coding Agent) erstellt. Der gesamte Code, die Dokumentation und die Konfigurationsdateien wurden durch KI generiert und können Fehler enthalten. Eine sorgfältige Prüfung vor dem produktiven Einsatz wird empfohlen.
+
 **Miracast-kompatibler Empfänger (Sink) für den Raspberry Pi Zero 2W**
 
 NicoCast verwandelt einen Raspberry Pi Zero 2W in einen kabellosen
