@@ -20,6 +20,7 @@ Pipeline (audio, AAC):
         → audioconvert → [alsasink | autoaudiosink]
 """
 
+import shlex
 import subprocess
 import threading
 import logging
@@ -73,7 +74,7 @@ class DisplayPipeline:
             env.setdefault("GST_DEBUG", "1")
 
             self._proc = subprocess.Popen(
-                [gst_bin] + pipeline.split(),
+                [gst_bin] + shlex.split(pipeline),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
