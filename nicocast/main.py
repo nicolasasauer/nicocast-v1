@@ -109,6 +109,8 @@ class NicoCast:
 
         # Register P2P event handler
         self.wifi.on_event(self._on_p2p_event)
+        # Register WiFi fallback handler
+        self.wifi.on_fallback(self._on_wifi_fallback)
 
         # Start subsystems
         self.wifi.start()
@@ -153,6 +155,19 @@ class NicoCast:
             logger.info("P2P group removed – stopping display pipeline")
             self.display.stop()
             self._streaming = False
+
+    def _on_wifi_fallback(self) -> None:
+        """Called when the WiFi fallback timer fires (no Miracast device connected)."""
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "WiFi fallback triggered – stopping Miracast subsystems so the "
+            "device is reachable via SSH on the saved Wi-Fi network"
+        )
+        # Stop RTSP and display pipeline; WiFiP2P already issued RECONNECT.
+        self.display.stop()
+        self.rtsp.stop()
+        self._streaming = False
+        self._running = False
 
     def _on_session_start(
         self, rtp_port: int, video_format: str, audio_codecs: str
