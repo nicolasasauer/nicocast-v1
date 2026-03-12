@@ -11,6 +11,11 @@ User=nicocast
 Group=nicocast
 
 WorkingDirectory=/opt/nicocast
+
+# Pre-start: check operation_mode and stop/start NetworkManager accordingly.
+# The '+' prefix runs this command as root regardless of the User= setting.
+ExecStartPre=+/opt/nicocast/scripts/nicocast-prestart.sh
+
 ExecStart=/opt/nicocast/venv/bin/python -m nicocast \
     --config /etc/nicocast/nicocast.conf
 

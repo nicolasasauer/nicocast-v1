@@ -105,6 +105,22 @@ class NicoCast:
         logger.info("  NicoCast starting – device: '%s'", device_name)
         logger.info("═══════════════════════════════════════")
 
+        # Log the active operation mode and emit a warning for hybrid mode because
+        # NetworkManager's background Wi-Fi scanning can increase video latency.
+        operation_mode = self.config.get("general", "operation_mode").lower().strip()
+        if operation_mode == "performance":
+            logger.info(
+                "Operation mode: PERFORMANCE (P2P-only). "
+                "NetworkManager is stopped by the pre-start script."
+            )
+        else:
+            logger.warning(
+                "Operation mode: HYBRID (STA + P2P). "
+                "NetworkManager is active – background Wi-Fi scanning by "
+                "NetworkManager may increase video latency. "
+                "Switch to 'performance' mode with: sudo toggle-mode.sh"
+            )
+
         self._running = True
 
         # Register P2P event handler
