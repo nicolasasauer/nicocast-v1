@@ -95,7 +95,7 @@ systemctl enable "${WPA_SERVICE}"
 systemctl restart "${WPA_SERVICE}"
 
 # Give wpa_supplicant time to create its control socket
-for i in $(seq 1 10); do
+for i in $(seq 1 20); do
     if [[ -S "/var/run/wpa_supplicant/${IFACE}" ]]; then
         info "wpa_supplicant control socket ready."
         break

@@ -12,6 +12,8 @@ set -euo pipefail
 
 CONFIG="${NICOCAST_CONFIG:-/etc/nicocast/nicocast.conf}"
 LOG_TAG="nicocast-prestart"
+# Seconds to wait for the wpa_supplicant control socket to appear
+WPA_SOCKET_TIMEOUT=15
 
 # ─── Determine SD-card log file path from config ─────────────────────────────
 _LOG_FILE=""
@@ -40,10 +42,11 @@ _log() {
     fi
 }
 
-# ─── Read operation_mode from config ─────────────────────────────────────────
+# ─── Read operation_mode and interface from config ────────────────────────────
 MODE="hybrid"   # safe default
+IFACE="wlan0"   # safe default
 if [[ -f "${CONFIG}" ]]; then
-    # Extract the value; strip inline comments and whitespace
+    # Extract operation_mode; strip inline comments and whitespace
     _raw=$(grep -E "^[[:space:]]*operation_mode[[:space:]]*=" "${CONFIG}" 2>/dev/null \
            | tail -1 \
            | sed 's/.*=[[:space:]]*//' \
@@ -51,6 +54,15 @@ if [[ -f "${CONFIG}" ]]; then
            | tr -d '[:space:]')
     if [[ -n "${_raw}" ]]; then
         MODE="${_raw}"
+    fi
+    # Extract wifi interface
+    _iface=$(grep -E "^[[:space:]]*interface[[:space:]]*=" "${CONFIG}" 2>/dev/null \
+             | tail -1 \
+             | sed 's/.*=[[:space:]]*//' \
+             | sed 's/[[:space:]]*#.*//' \
+             | tr -d '[:space:]')
+    if [[ -n "${_iface}" ]]; then
+        IFACE="${_iface}"
     fi
 fi
 
@@ -65,6 +77,13 @@ case "${MODE}" in
             _log "NetworkManager stopped."
         else
             _log "NetworkManager is already inactive – nothing to do."
+        fi
+        # Ensure the standalone wpa_supplicant@<iface> service is running so
+        # the P2P control socket is available for NicoCast.
+        if ! systemctl is-active --quiet "wpa_supplicant@${IFACE}" 2>/dev/null; then
+            _log "Starting wpa_supplicant@${IFACE}…"
+            systemctl start "wpa_supplicant@${IFACE}" 2>/dev/null || \
+                _log "WARNING: Could not start wpa_supplicant@${IFACE} – P2P may not work."
         fi
         ;;
     hybrid)
@@ -81,3 +100,17 @@ case "${MODE}" in
         _log "WARNING: Unknown operation_mode '${MODE}' – defaulting to hybrid behaviour."
         ;;
 esac
+
+# ─── Ensure wpa_supplicant socket is ready ────────────────────────────────────
+WPA_SOCKET="/var/run/wpa_supplicant/${IFACE}"
+_log "Waiting for wpa_supplicant control socket at ${WPA_SOCKET}…"
+_WAITED=0
+while [[ ! -S "${WPA_SOCKET}" ]] && [[ ${_WAITED} -lt ${WPA_SOCKET_TIMEOUT} ]]; do
+    sleep 1
+    _WAITED=$(( _WAITED + 1 ))
+done
+if [[ -S "${WPA_SOCKET}" ]]; then
+    _log "wpa_supplicant socket ready (waited ${_WAITED} s)."
+else
+    _log "WARNING: wpa_supplicant socket not found at ${WPA_SOCKET} after ${WPA_SOCKET_TIMEOUT} s – P2P may not work."
+fi
