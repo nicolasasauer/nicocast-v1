@@ -140,6 +140,21 @@ if [[ ! -f "${CONFIG_DIR}/nicocast.conf" ]]; then
 else
     warn "Config already exists at ${CONFIG_DIR}/nicocast.conf – not overwriting."
 fi
+
+# ── Always start in hybrid mode so SSH stays connected after install ──────────
+# Hybrid mode keeps NetworkManager running, which means the existing Wi-Fi
+# connection (and any SSH session) is preserved.  The user can switch to the
+# lower-latency performance mode later with:  sudo toggle-mode.sh
+info "Ensuring operation_mode = hybrid so SSH stays connected after install…"
+if grep -qE "^[[:space:]]*operation_mode[[:space:]]*=" "${CONFIG_DIR}/nicocast.conf" 2>/dev/null; then
+    sed -i 's/^[[:space:]]*operation_mode[[:space:]]*=.*/operation_mode = hybrid/' \
+        "${CONFIG_DIR}/nicocast.conf"
+else
+    # Line is absent (e.g. custom config without the key) – append it.
+    echo "operation_mode = hybrid" >> "${CONFIG_DIR}/nicocast.conf"
+fi
+_logfile "operation_mode forced to hybrid (SSH-safe default)"
+
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_DIR}"
 
 # ─── 5b. Log directories ─────────────────────────────────────────────────────
@@ -209,6 +224,11 @@ echo "  • Config file:      ${CONFIG_DIR}/nicocast.conf"
 echo "  • Install log (SD): ${INSTALL_LOG}"
 echo "  • Runtime log (SD): ${BOOT_LOG_DIR}/nicocast.log"
 echo "  • Toggle mode:      sudo toggle-mode.sh  (hybrid ↔ performance)"
+echo ""
+warn "NicoCast is running in HYBRID mode (NetworkManager stays active)."
+warn "Your SSH/Wi-Fi connection is preserved."
+warn "For lower video latency, switch to performance mode once you no longer need SSH:"
+warn "  sudo toggle-mode.sh"
 echo ""
 warn "On your Android device, open Smart View (or any Miracast app)"
 warn "and look for '$(grep device_name ${CONFIG_DIR}/nicocast.conf | awk -F= '{print $2}' | xargs)'."

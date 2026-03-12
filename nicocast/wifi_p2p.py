@@ -106,14 +106,15 @@ class WiFiP2P:
         logger.info("  device_name  = %s", dev_name)
         dev_type = self._wpa_cli("GET", "device_type")
         logger.info("  device_type  = %s", dev_type)
-        if wifi_display and wifi_display.strip() == "0":
+        wifi_display_val = wifi_display.strip() if wifi_display else ""
+        if wifi_display_val == "0":
             logger.warning(
                 "wifi_display is 0 – this device will NOT appear in Samsung Smart View. "
                 "Check that wifi_display=1 is present in "
                 "/etc/wpa_supplicant/wpa_supplicant-p2p.conf (re-run setup_wpa_supplicant.sh "
                 "to regenerate it)."
             )
-        elif wifi_display and wifi_display.strip() == "1":
+        elif wifi_display_val == "1":
             logger.info(
                 "wifi_display=1 confirmed – device should be visible in Samsung Smart View "
                 "as a Miracast sink (look for '%s').", self.config.get("general", "device_name")
