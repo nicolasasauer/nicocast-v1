@@ -89,6 +89,37 @@ class WiFiP2P:
         self._start_fallback_timer()
 
         logger.info("Wi-Fi Direct P2P started, advertising as '%s'", device_name)
+        self._log_startup_diagnostics()
+
+    def _log_startup_diagnostics(self) -> None:
+        """Log wpa_supplicant / WFD state for debugging Samsung Smart View issues."""
+        logger.info("─── Wi-Fi Direct / WFD diagnostics ───")
+        status = self._wpa_cli("STATUS")
+        if status:
+            for line in status.splitlines():
+                logger.info("  wpa status: %s", line)
+        wifi_display = self._wpa_cli("GET", "wifi_display")
+        logger.info("  wifi_display = %s", wifi_display)
+        wfd = self._wpa_cli("GET", "wfd_subelems")
+        logger.info("  wfd_subelems = %s", wfd)
+        dev_name = self._wpa_cli("GET", "device_name")
+        logger.info("  device_name  = %s", dev_name)
+        dev_type = self._wpa_cli("GET", "device_type")
+        logger.info("  device_type  = %s", dev_type)
+        wifi_display_val = wifi_display.strip() if wifi_display else ""
+        if wifi_display_val == "0":
+            logger.warning(
+                "wifi_display is 0 – this device will NOT appear in Samsung Smart View. "
+                "Check that wifi_display=1 is present in "
+                "/etc/wpa_supplicant/wpa_supplicant-p2p.conf (re-run setup_wpa_supplicant.sh "
+                "to regenerate it)."
+            )
+        elif wifi_display_val == "1":
+            logger.info(
+                "wifi_display=1 confirmed – device should be visible in Samsung Smart View "
+                "as a Miracast sink (look for '%s').", self.config.get("general", "device_name")
+            )
+        logger.info("──────────────────────────────────────")
 
     def stop(self) -> None:
         """Tear down P2P and clean up."""

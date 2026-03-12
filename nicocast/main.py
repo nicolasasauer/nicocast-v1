@@ -104,6 +104,9 @@ class NicoCast:
         logger.info("═══════════════════════════════════════")
         logger.info("  NicoCast starting – device: '%s'", device_name)
         logger.info("═══════════════════════════════════════")
+        logger.info("Config file : %s", self.config.path or "(built-in defaults)")
+        logger.info("Log file    : %s", log_file or "(file logging disabled)")
+        logger.info("Log level   : %s", log_level)
 
         # Log the active operation mode and emit a warning for hybrid mode because
         # NetworkManager's background Wi-Fi scanning can increase video latency.

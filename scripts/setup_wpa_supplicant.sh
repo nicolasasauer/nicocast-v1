@@ -10,6 +10,9 @@
 # Parameters:
 #   $1  – wireless interface (default: wlan0)
 #   $2  – Wi-Fi country code  (default: $WIFI_COUNTRY env var, then DE)
+#
+# Environment variables:
+#   INSTALL_LOG  – optional path to a log file for SD-card-readable logging
 # =============================================================================
 set -euo pipefail
 
@@ -20,11 +23,18 @@ WPA_P2P_CONF="/etc/wpa_supplicant/wpa_supplicant-p2p.conf"
 WPA_SERVICE="wpa_supplicant@${IFACE}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()  { echo -e "${GREEN}[+]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
-error() { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
+info()  { echo -e "${GREEN}[+]${NC} $*"; _logfile "[INFO ] $*"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $*"; _logfile "[WARN ] $*"; }
+error() { echo -e "${RED}[✗]${NC} $*" >&2; _logfile "[ERROR] $*"; exit 1; }
+_logfile() {
+    if [[ -n "${INSTALL_LOG:-}" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [wpa_setup] $*" >> "${INSTALL_LOG}" 2>/dev/null || true
+    fi
+}
 
 [[ $EUID -eq 0 ]] || error "Run as root (sudo)"
+
+_logfile "--- setup_wpa_supplicant.sh started (iface=${IFACE} country=${COUNTRY}) ---"
 
 # ─── Back up existing wpa_supplicant config ───────────────────────────────────
 if [[ -f "${WPA_CONF}" ]]; then
@@ -57,6 +67,9 @@ persistent_reconnect=1
 p2p_no_group_iface=0
 
 # ── WFD (Wi-Fi Display / Miracast) advertisement ──────────────────────────
+# Enable Wi-Fi Display so this device appears in Samsung Smart View and
+# other Miracast sources as soon as wpa_supplicant is running.
+wifi_display=1
 # Subelement 0: primary sink, session available, port 7236, 50 Mbps
 # 00 = Subelement ID 0
 # 06 = data length 6 bytes
@@ -97,4 +110,13 @@ else
     warn "P2P status check inconclusive – NicoCast will enable P2P at startup."
 fi
 
+# ─── Log wpa_supplicant status for diagnostics ───────────────────────────────
+_logfile "--- wpa_cli status after wpa_supplicant restart ---"
+wpa_cli -i "${IFACE}" status 2>&1 | while IFS= read -r line; do _logfile "  ${line}"; done || true
+_logfile "--- wpa_cli get wifi_display ---"
+wpa_cli -i "${IFACE}" get wifi_display 2>&1 | while IFS= read -r line; do _logfile "  ${line}"; done || true
+_logfile "--- wpa_cli get wfd_subelems ---"
+wpa_cli -i "${IFACE}" get wfd_subelems 2>&1 | while IFS= read -r line; do _logfile "  ${line}"; done || true
+
 info "wpa_supplicant P2P setup complete."
+_logfile "--- setup_wpa_supplicant.sh complete ---"

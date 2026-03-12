@@ -29,6 +29,7 @@ Android-Gerät  ←──── Wi-Fi Direct (P2P) ────→  Raspberry Pi
 5. [Verbindung herstellen (Android)](#5-verbindung-herstellen-android)
 6. [Web-UI](#6-web-ui)
 7. [Dienst verwalten](#7-dienst-verwalten)
+   - [Betriebsmodi](#betriebsmodi)
 8. [Konfigurationsreferenz](#8-konfigurationsreferenz)
 9. [Projektstruktur](#9-projektstruktur)
 10. [Technische Details](#10-technische-details)
@@ -95,8 +96,11 @@ Starte den **Raspberry Pi Imager** auf deinem PC/Mac.
 ```
 
 > **Hinweis:** Das WLAN-Heimnetz wird nur für den ersten SSH-Zugang und die
-> Installation benötigt. Nach der Installation verwaltet NicoCast `wlan0`
-> ausschließlich für Wi-Fi Direct P2P.
+> Installation benötigt. NicoCast läuft standardmäßig im **Hybrid-Modus**:
+> NetworkManager bleibt aktiv, sodass die bestehende WLAN- und SSH-Verbindung
+> erhalten bleibt. Das P2P-Interface für Miracast wird parallel dazu betrieben.
+> Wer maximale Miracast-Performance benötigt, kann später auf den
+> Performance-Modus umschalten (siehe [Betriebsmodi](#betriebsmodi)).
 
 ### 2.2  Image schreiben
 
@@ -157,6 +161,14 @@ Das dauert beim ersten Mal ca. 5–10 Minuten.
 
 ### 4.1  Repository klonen
 
+Zuerst `git` installieren (falls noch nicht vorhanden):
+
+```bash
+pi@raspberrypi:~ $ sudo apt-get install -y git
+```
+
+Dann das Repository klonen:
+
 ```bash
 pi@raspberrypi:~ $ git clone https://github.com/nicolasasauer/nicocast-v1.git
 Cloning into 'nicocast-v1'...
@@ -184,6 +196,7 @@ pi@raspberrypi:~/nicocast-v1 $ sudo bash scripts/install.sh
 [+] Creating Python virtual environment…
 [+] Headless OS detected – setting video_sink = kmssink in config.
 [+] Config written to /etc/nicocast/nicocast.conf – edit as needed.
+[+] Ensuring operation_mode = hybrid so SSH stays connected after install…
 [+] Configuring wpa_supplicant for Wi-Fi Direct P2P (country: DE)…
 [+] Writing wpa_supplicant P2P config to /etc/wpa_supplicant/wpa_supplicant-p2p.conf (country: DE)…
 [+] Backed up existing wpa_supplicant.conf
@@ -202,7 +215,12 @@ pi@raspberrypi:~/nicocast-v1 $ sudo bash scripts/install.sh
   • Live logs:       sudo journalctl -fu nicocast
   • Settings web UI: http://192.168.1.42:8080/
   • Config file:     /etc/nicocast/nicocast.conf
+  • Toggle mode:     sudo toggle-mode.sh  (hybrid <-> performance)
 
+[!] NicoCast is running in HYBRID mode (NetworkManager stays active).
+[!] Your SSH/Wi-Fi connection is preserved.
+[!] For lower video latency, switch to performance mode once you no longer need SSH:
+[!]   sudo toggle-mode.sh
 [!] On your Android device, open Smart View (or any Miracast app)
 [!] and look for 'NicoCast'.
 ```
@@ -388,6 +406,38 @@ sudo systemctl stop nicocast
 sudo systemctl disable nicocast
 ```
 
+### Betriebsmodi
+
+NicoCast kennt zwei Betriebsmodi, die du mit `toggle-mode.sh` umschalten kannst:
+
+| Modus | Verhalten | Empfehlung |
+|---|---|---|
+| **hybrid** | NetworkManager läuft weiter; bestehende WLAN- und SSH-Verbindung bleibt erhalten. | Standard nach der Installation – ideal für Einrichtung und Wartung. |
+| **performance** | NetworkManager wird beim Start gestoppt; wpa_supplicant hat exklusive Kontrolle über `wlan0`. | Niedrigste Latenz, aber SSH-Verbindung geht verloren. |
+
+> **Nach der Installation ist NicoCast immer im Hybrid-Modus.**
+> Auf performance umschalten, sobald SSH nicht mehr benötigt wird:
+
+```bash
+# Zwischen hybrid und performance umschalten:
+sudo toggle-mode.sh
+
+# Aktuellen Modus prüfen:
+grep operation_mode /etc/nicocast/nicocast.conf
+```
+
+Oder direkt in der Konfiguration setzen:
+
+```bash
+# Hybrid-Modus (SSH bleibt aktiv):
+sudo sed -i 's/^operation_mode = .*/operation_mode = hybrid/' /etc/nicocast/nicocast.conf
+sudo systemctl restart nicocast
+
+# Performance-Modus (niedrigste Latenz, SSH trennt sich):
+sudo sed -i 's/^operation_mode = .*/operation_mode = performance/' /etc/nicocast/nicocast.conf
+sudo systemctl restart nicocast
+```
+
 ---
 
 ## 8. Konfigurationsreferenz
@@ -405,6 +455,7 @@ device_name = NicoCast        # Name auf dem Android-Gerät (max. 32 Zeichen)
 pin = 12345678                # WPS-PIN (nur bei connection_method = pin)
 connection_method = pbc       # pbc (kein PIN) oder pin
 log_level = INFO              # DEBUG | INFO | WARNING | ERROR
+operation_mode = hybrid       # hybrid (SSH-sicher) | performance (niedrigste Latenz)
 
 [wifi]
 interface = wlan0             # Wireless-Interface (normalerweise wlan0)
