@@ -13,7 +13,32 @@ set -euo pipefail
 CONFIG="${NICOCAST_CONFIG:-/etc/nicocast/nicocast.conf}"
 LOG_TAG="nicocast-prestart"
 
-_log() { logger -t "${LOG_TAG}" "$*" || echo "[${LOG_TAG}] $*" >&2; }
+# ─── Determine SD-card log file path from config ─────────────────────────────
+_LOG_FILE=""
+if [[ -f "${CONFIG}" ]]; then
+    _lf=$(grep -E "^[[:space:]]*log_file[[:space:]]*=" "${CONFIG}" 2>/dev/null \
+           | tail -1 \
+           | sed 's/^[^=]*=[[:space:]]*//' \
+           | sed 's/[[:space:]]*#.*//' \
+           | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [[ -n "${_lf}" ]]; then
+        _LOG_FILE="${_lf}"
+    fi
+fi
+
+_log() {
+    local msg="$*"
+    # Always log to syslog / journalctl
+    logger -t "${LOG_TAG}" "${msg}" 2>/dev/null || echo "[${LOG_TAG}] ${msg}" >&2
+    # Also append to the SD-card log file when available
+    if [[ -n "${_LOG_FILE}" ]]; then
+        local dir
+        dir="$(dirname "${_LOG_FILE}")"
+        if [[ -d "${dir}" ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${LOG_TAG}] ${msg}" >> "${_LOG_FILE}" 2>/dev/null || true
+        fi
+    fi
+}
 
 # ─── Read operation_mode from config ─────────────────────────────────────────
 MODE="hybrid"   # safe default
