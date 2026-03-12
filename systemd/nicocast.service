@@ -1,7 +1,7 @@
 [Unit]
 Description=NicoCast – Miracast sink for Raspberry Pi Zero 2W
 Documentation=https://github.com/nicolasasauer/nicocast-v1
-After=network.target wpa_supplicant.service
+After=network.target wpa_supplicant@wlan0.service
 
 [Service]
 Type=simple

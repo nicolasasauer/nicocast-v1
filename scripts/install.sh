@@ -84,8 +84,7 @@ info "Creating Python virtual environment…"
 python3 -m venv "${INSTALL_DIR}/venv"
 "${INSTALL_DIR}/venv/bin/pip" install --quiet --upgrade pip
 "${INSTALL_DIR}/venv/bin/pip" install --quiet \
-    flask \
-    configparser
+    flask
 
 # ─── 5. Configuration ─────────────────────────────────────────────────────────
 info "Installing default configuration to ${CONFIG_DIR}…"
@@ -104,6 +103,12 @@ else
     warn "Config already exists at ${CONFIG_DIR}/nicocast.conf – not overwriting."
 fi
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_DIR}"
+
+# ─── 5b. Log directory ────────────────────────────────────────────────────────
+info "Creating log directory /var/log/nicocast…"
+mkdir -p /var/log/nicocast
+chown "${SERVICE_USER}:${SERVICE_USER}" /var/log/nicocast
+chmod 750 /var/log/nicocast
 
 # ─── 6. NetworkManager: release wlan0 so wpa_supplicant can manage it ─────────
 if systemctl is-active --quiet NetworkManager 2>/dev/null; then
