@@ -42,6 +42,12 @@ class TestConfigDefaults:
     def test_fullscreen_default(self):
         assert self.cfg.getbool("display", "fullscreen") is True
 
+    def test_operation_mode_default(self):
+        assert self.cfg.get("general", "operation_mode") == "hybrid"
+
+    def test_operation_mode_in_defaults(self):
+        assert "operation_mode" in DEFAULTS["general"]
+
     def test_unknown_key_raises(self):
         with pytest.raises(KeyError):
             self.cfg.get("general", "nonexistent_key_xyz")
@@ -80,6 +86,25 @@ class TestConfigFileRead:
         cfg = Config(path=str(conf))
         # rtp_port not in file → should return default
         assert cfg.getint("miracast", "rtp_port") == 1028
+
+    def test_reads_operation_mode_hybrid_from_file(self, tmp_path):
+        conf = tmp_path / "nicocast.conf"
+        conf.write_text("[general]\noperation_mode = hybrid\n")
+        cfg = Config(path=str(conf))
+        assert cfg.get("general", "operation_mode") == "hybrid"
+
+    def test_reads_operation_mode_performance_from_file(self, tmp_path):
+        conf = tmp_path / "nicocast.conf"
+        conf.write_text("[general]\noperation_mode = performance\n")
+        cfg = Config(path=str(conf))
+        assert cfg.get("general", "operation_mode") == "performance"
+
+    def test_operation_mode_falls_back_to_hybrid_when_missing(self, tmp_path):
+        conf = tmp_path / "nicocast.conf"
+        conf.write_text("[general]\ndevice_name = SomeDevice\n")
+        cfg = Config(path=str(conf))
+        # operation_mode not in file → should return default "hybrid"
+        assert cfg.get("general", "operation_mode") == "hybrid"
 
 
 class TestConfigSetAndSave:

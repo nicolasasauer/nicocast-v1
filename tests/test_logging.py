@@ -41,6 +41,7 @@ class TestLoggingConfig:
         assert "log_file" in general
         assert "log_max_bytes" in general
         assert "log_backup_count" in general
+        assert "operation_mode" in general
 
 
 class TestSetupLogging:

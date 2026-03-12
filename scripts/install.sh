@@ -16,6 +16,14 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SERVICE_USER="nicocast"
 WIFI_COUNTRY="${WIFI_COUNTRY:-DE}"
 
+# ─── Detect boot partition (Bookworm: /boot/firmware, older: /boot) ───────────
+if [[ -d /boot/firmware ]]; then
+    BOOT_DIR="/boot/firmware"
+else
+    BOOT_DIR="/boot"
+fi
+BOOT_LOG_DIR="${BOOT_DIR}/nicocast"
+
 # ─── Colour helpers ───────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${GREEN}[+]${NC} $*"; }
@@ -79,6 +87,12 @@ from nicocast.main import main
 main()
 EOF
 
+# Install helper scripts
+info "Installing NicoCast scripts to ${INSTALL_DIR}/scripts…"
+mkdir -p "${INSTALL_DIR}/scripts"
+cp "${REPO_DIR}/scripts/nicocast-prestart.sh" "${INSTALL_DIR}/scripts/"
+chmod 755 "${INSTALL_DIR}/scripts/nicocast-prestart.sh"
+
 # ─── 4. Python virtual environment ───────────────────────────────────────────
 info "Creating Python virtual environment…"
 python3 -m venv "${INSTALL_DIR}/venv"
@@ -98,17 +112,29 @@ if [[ ! -f "${CONFIG_DIR}/nicocast.conf" ]]; then
         sed -i 's/^video_sink = auto/video_sink = kmssink/' \
             "${CONFIG_DIR}/nicocast.conf"
     fi
+    # Update log_file to the detected boot partition so logs are accessible
+    # directly from the SD card when plugged into a PC.
+    info "Setting log_file to ${BOOT_LOG_DIR}/nicocast.log (SD-card readable)."
+    sed -i "s|^log_file = .*|log_file = ${BOOT_LOG_DIR}/nicocast.log|" \
+        "${CONFIG_DIR}/nicocast.conf"
     info "Config written to ${CONFIG_DIR}/nicocast.conf – edit as needed."
 else
     warn "Config already exists at ${CONFIG_DIR}/nicocast.conf – not overwriting."
 fi
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_DIR}"
 
-# ─── 5b. Log directory ────────────────────────────────────────────────────────
-info "Creating log directory /var/log/nicocast…"
+# ─── 5b. Log directories ─────────────────────────────────────────────────────
+info "Creating log directories…"
+# /var/log/nicocast is used as a fallback and for development environments.
 mkdir -p /var/log/nicocast
 chown "${SERVICE_USER}:${SERVICE_USER}" /var/log/nicocast
 chmod 750 /var/log/nicocast
+# Boot-partition log directory: readable from any PC when the SD card is inserted.
+info "Creating SD-card-readable log directory at ${BOOT_LOG_DIR}…"
+mkdir -p "${BOOT_LOG_DIR}"
+# The boot partition is typically owned by root; ensure the service user can write.
+chown "${SERVICE_USER}:${SERVICE_USER}" "${BOOT_LOG_DIR}" 2>/dev/null || \
+    chmod 777 "${BOOT_LOG_DIR}"
 
 # ─── 6. NetworkManager: release wlan0 so wpa_supplicant can manage it ─────────
 if systemctl is-active --quiet NetworkManager 2>/dev/null; then
@@ -142,16 +168,23 @@ systemctl daemon-reload
 systemctl enable nicocast.service
 systemctl start nicocast.service
 
-# ─── 10. Summary ───────────────────────────────────────────────────────────────
+# ─── 10. Install toggle-mode script ──────────────────────────────────────────
+info "Installing toggle-mode.sh to /usr/local/bin/toggle-mode.sh…"
+cp "${REPO_DIR}/scripts/toggle-mode.sh" /usr/local/bin/toggle-mode.sh
+chmod 755 /usr/local/bin/toggle-mode.sh
+
+# ─── 11. Summary ───────────────────────────────────────────────────────────────
 echo ""
 info "════════════════════════════════════════════"
 info "  NicoCast installed successfully!"
 info "════════════════════════════════════════════"
 echo ""
-echo "  • Service status:  sudo systemctl status nicocast"
-echo "  • Live logs:       sudo journalctl -fu nicocast"
-echo "  • Settings web UI: http://$(hostname -I | awk '{print $1}'):8080/"
-echo "  • Config file:     ${CONFIG_DIR}/nicocast.conf"
+echo "  • Service status:   sudo systemctl status nicocast"
+echo "  • Live logs:        sudo journalctl -fu nicocast"
+echo "  • Settings web UI:  http://$(hostname -I | awk '{print $1}'):8080/"
+echo "  • Config file:      ${CONFIG_DIR}/nicocast.conf"
+echo "  • Log file (SD):    ${BOOT_LOG_DIR}/nicocast.log"
+echo "  • Toggle mode:      sudo toggle-mode.sh  (hybrid ↔ performance)"
 echo ""
 warn "On your Android device, open Smart View (or any Miracast app)"
 warn "and look for '$(grep device_name ${CONFIG_DIR}/nicocast.conf | awk -F= '{print $2}' | xargs)'."

@@ -34,12 +34,19 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "connection_method": "pbc",
         # Log level: DEBUG | INFO | WARNING | ERROR
         "log_level": "INFO",
-        # Path to the persistent log file (empty = file logging disabled)
+        # Path to the persistent log file (empty = file logging disabled).
+        # Falls back to /var/log for development environments where the boot
+        # partition is not available.
         "log_file": "/var/log/nicocast/nicocast.log",
         # Maximum size of a single log file in bytes before rotation (default 5 MB)
         "log_max_bytes": "5242880",
         # Number of rotated log files to keep
         "log_backup_count": "5",
+        # Operation mode: hybrid | performance
+        #   hybrid      – NetworkManager keeps running alongside the P2P interface.
+        #   performance – NetworkManager is stopped so wpa_supplicant has exclusive
+        #                 control over wlan0 (lower latency, P2P-only).
+        "operation_mode": "hybrid",
     },
     "wifi": {
         # Physical wireless interface used for P2P
