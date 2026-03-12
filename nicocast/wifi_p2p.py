@@ -61,12 +61,30 @@ class WiFiP2P:
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Configure Wi-Fi Direct and start advertising as a Miracast sink."""
+        """Configure Wi-Fi Direct and start advertising as a Miracast sink.
+
+        Lifecycle (mirrors the Samsung scmirroring_sink_prepare/start sequence):
+          1. Wait for the wpa_supplicant control socket to be ready.
+          2. Set WFD advertisement parameters (wifi_display=1, wfd_subelems).
+          3. Attach an event monitor so provision-discovery and group events
+             are dispatched immediately when Samsung Smart View selects this sink.
+          4. Start P2P_FIND so the device is visible in Smart View's scan list.
+        """
         logger.info("Starting Wi-Fi Direct P2P…")
 
         device_name = self.config.get("general", "device_name")
         wfd_subelems = self.config.get("wifi", "wfd_subelems")
         go_intent = self.config.get("wifi", "p2p_go_intent")
+
+        # Wait for the wpa_supplicant socket before issuing any commands.
+        # Without this, SET commands fail silently if the socket is not yet ready
+        # (e.g. wpa_supplicant@wlan0.service is still starting up).
+        if not self._wait_for_socket():
+            logger.error(
+                "wpa_supplicant socket not found at %s after 30 s – "
+                "Wi-Fi Direct P2P will not be available.",
+                self.wpa_socket_path,
+            )
 
         # Basic wpa_supplicant settings
         self._wpa_cli("SET", "device_name", device_name)
@@ -185,6 +203,20 @@ class WiFiP2P:
             return None
         return self._get_iface_ip(iface)
 
+    # ─── wpa_supplicant socket helpers ────────────────────────────────────────
+
+    def _wait_for_socket(self, timeout: int = 30) -> bool:
+        """Block until the wpa_supplicant control socket exists (or *timeout* expires).
+
+        Returns True if the socket appeared, False if timed out.
+        """
+        for _ in range(timeout):
+            if os.path.exists(self.wpa_socket_path):
+                return True
+            logger.debug("Waiting for wpa_supplicant socket…")
+            time.sleep(1)
+        return False
+
     # ─── wpa_supplicant event monitoring ──────────────────────────────────────
 
     def _start_event_monitor(self) -> None:
@@ -204,17 +236,16 @@ class WiFiP2P:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         sock.bind(self._evt_sock_path)
 
-        # Wait for wpa_supplicant socket to appear
-        for _ in range(30):
-            if os.path.exists(self.wpa_socket_path):
-                break
-            logger.debug("Waiting for wpa_supplicant socket…")
-            time.sleep(1)
-        else:
-            logger.error(
-                "wpa_supplicant socket not found at %s", self.wpa_socket_path
-            )
-            return
+        # The main start() already waited for the socket; retry briefly here
+        # in case of a very tight race between start() returning and the thread
+        # actually connecting.
+        if not os.path.exists(self.wpa_socket_path):
+            if not self._wait_for_socket(timeout=10):
+                logger.error(
+                    "wpa_supplicant socket not found at %s", self.wpa_socket_path
+                )
+                sock.close()
+                return
 
         sock.connect(self.wpa_socket_path)
         sock.settimeout(1.0)
@@ -250,18 +281,75 @@ class WiFiP2P:
         """Handle a single wpa_supplicant event string."""
         logger.debug("WPA event: %s", event)
 
-        # ── P2P peer found ──────────────────────────────────────────────────
+        # ── P2P peer found (device visible in scan, user has NOT tapped yet) ──
         if event.startswith("P2P-DEVICE-FOUND"):
-            # Example: P2P-DEVICE-FOUND aa:bb:cc:dd:ee:ff p2p_dev_addr=...
+            # Example: P2P-DEVICE-FOUND aa:bb:cc:dd:ee:ff p2p_dev_addr=... name='...'
+            # Only log the discovery; the actual connection is initiated by the
+            # source device via a provision-discovery request (see below).
+            # Calling P2P_CONNECT here would race with Smart View before the user
+            # has selected this sink, causing the connection to fail.
             parts = event.split()
             if len(parts) >= 2:
                 peer_addr = parts[1]
-                logger.info("P2P peer found: %s – auto-accepting", peer_addr)
+                logger.info(
+                    "P2P peer found: %s – waiting for provision discovery", peer_addr
+                )
+
+        # ── PBC provision-discovery request (user tapped NicoCast in Smart View)
+        elif event.startswith("P2P-PROV-DISC-PBC-REQ"):
+            # Example: P2P-PROV-DISC-PBC-REQ aa:bb:cc:dd:ee:ff p2p_dev_addr=... name='Samsung Galaxy ...'
+            # Samsung Smart View sends this when the user taps on the sink.
+            # Respond immediately with P2P_CONNECT pbc to accept the connection.
+            parts = event.split()
+            if len(parts) >= 2:
+                peer_addr = parts[1]
+                logger.info(
+                    "PBC provision-discovery from %s – accepting connection", peer_addr
+                )
                 threading.Thread(
                     target=self.accept_connection,
                     args=(peer_addr,),
                     daemon=True,
                 ).start()
+
+        # ── PIN provision-discovery (source is displaying a PIN for us to enter) ─
+        elif event.startswith("P2P-PROV-DISC-SHOW-PIN"):
+            # Example: P2P-PROV-DISC-SHOW-PIN aa:bb:cc:dd:ee:ff 12345678 ...
+            # The source device is showing a PIN; we accept using the configured pin.
+            parts = event.split()
+            if len(parts) >= 2:
+                peer_addr = parts[1]
+                logger.info(
+                    "PIN provision-discovery from %s – accepting with configured PIN",
+                    peer_addr,
+                )
+                threading.Thread(
+                    target=self.accept_connection,
+                    args=(peer_addr,),
+                    daemon=True,
+                ).start()
+
+        # ── Persistent-group invitation (re-connect from a previous session) ────
+        elif event.startswith("P2P-INVITATION-RECEIVED"):
+            # Example: P2P-INVITATION-RECEIVED sa=aa:bb:cc:dd:ee:ff persistent=1 ...
+            logger.info("P2P invitation received – accepting persistent group")
+            # Extract persistent group id and peer address
+            persistent_id = None
+            peer_addr = None
+            for token in event.split():
+                if token.startswith("persistent="):
+                    persistent_id = token.split("=", 1)[1]
+                elif token.startswith("sa="):
+                    peer_addr = token.split("=", 1)[1]
+            if persistent_id is not None and peer_addr is not None:
+                self._wpa_cli(
+                    "P2P_INVITE", f"persistent={persistent_id}",
+                    f"peer={peer_addr}",
+                )
+            else:
+                logger.warning(
+                    "Could not parse P2P-INVITATION-RECEIVED: %s", event
+                )
 
         # ── P2P group started (we are the GO) ───────────────────────────────
         elif event.startswith("P2P-GROUP-STARTED"):
@@ -274,7 +362,7 @@ class WiFiP2P:
             self.connected_peer = None
             self.peer_ip = None
             self._stop_dnsmasq()
-            # Restart discovery
+            # Restart discovery so the sink is visible again in Smart View
             if self._running:
                 self._wpa_cli("P2P_FIND")
 

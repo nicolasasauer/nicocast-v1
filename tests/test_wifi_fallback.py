@@ -51,7 +51,8 @@ class TestFallbackTimerLifecycle:
         """_start_fallback_timer should schedule a threading.Timer."""
         wifi = _make_wifi(_make_config(wifi_fallback_timeout="60"))
         with patch.object(wifi, "_wpa_cli", return_value="OK"), \
-             patch.object(wifi, "_start_event_monitor"):
+             patch.object(wifi, "_start_event_monitor"), \
+             patch.object(wifi, "_wait_for_socket", return_value=True):
             wifi.start()
 
         assert wifi._fallback_timer is not None
@@ -62,7 +63,8 @@ class TestFallbackTimerLifecycle:
         """Timer should NOT be started when wifi_fallback_timeout=0."""
         wifi = _make_wifi(_make_config(wifi_fallback_timeout="0"))
         with patch.object(wifi, "_wpa_cli", return_value="OK"), \
-             patch.object(wifi, "_start_event_monitor"):
+             patch.object(wifi, "_start_event_monitor"), \
+             patch.object(wifi, "_wait_for_socket", return_value=True):
             wifi.start()
 
         assert wifi._fallback_timer is None
@@ -72,6 +74,7 @@ class TestFallbackTimerLifecycle:
         wifi = _make_wifi(_make_config(wifi_fallback_timeout="60"))
         with patch.object(wifi, "_wpa_cli", return_value="OK"), \
              patch.object(wifi, "_start_event_monitor"), \
+             patch.object(wifi, "_wait_for_socket", return_value=True), \
              patch.object(wifi, "_stop_dnsmasq"):
             wifi.start()
             wifi.stop()

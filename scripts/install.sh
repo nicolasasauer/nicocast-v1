@@ -170,23 +170,37 @@ mkdir -p "${BOOT_LOG_DIR}"
 chown "${SERVICE_USER}:${SERVICE_USER}" "${BOOT_LOG_DIR}" 2>/dev/null || \
     chmod 777 "${BOOT_LOG_DIR}"
 
-# ─── 6. NetworkManager: release wlan0 so wpa_supplicant can manage it ─────────
-if systemctl is-active --quiet NetworkManager 2>/dev/null; then
-    info "NetworkManager detected – marking wlan0 as unmanaged…"
-    NM_UNMANAGED_FILE="/etc/NetworkManager/conf.d/nicocast-unmanaged.conf"
-    cat > "${NM_UNMANAGED_FILE}" <<'NMEOF'
-# Written by NicoCast installer.
-# wlan0 is managed by wpa_supplicant for Wi-Fi Direct P2P.
-[keyfile]
-unmanaged-devices=interface-name:wlan0
-NMEOF
+# ─── 6 & 7. NetworkManager / wpa_supplicant (hybrid mode – preserve Wi-Fi) ────
+# NicoCast defaults to hybrid mode so the existing Wi-Fi connection (and any
+# active SSH session) is preserved after installation.
+#
+# In hybrid mode NetworkManager keeps managing wlan0.  NicoCast's Python code
+# accesses the shared wpa_supplicant control socket to configure Wi-Fi Direct
+# P2P on top of the existing connection.  No changes to NetworkManager or
+# wpa_supplicant are needed at install time.
+#
+# Switching wlan0 to P2P-only (wpa_supplicant@wlan0, no NM) is ONLY done when
+# the user explicitly requests performance mode:   sudo toggle-mode.sh
+info "Hybrid mode: NetworkManager will keep managing wlan0."
+info "Your existing Wi-Fi connection and SSH session are preserved."
+
+# Clean up any unmanaged config left over from an older NicoCast installation
+# that incorrectly released wlan0 in hybrid mode.
+NM_UNMANAGED_FILE="/etc/NetworkManager/conf.d/nicocast-unmanaged.conf"
+if [[ -f "${NM_UNMANAGED_FILE}" ]]; then
+    rm -f "${NM_UNMANAGED_FILE}"
     systemctl reload NetworkManager 2>/dev/null || true
-    info "NetworkManager will no longer manage wlan0."
+    sleep 2
+    info "Removed legacy NM unmanaged config from previous install (wlan0 restored to NM)."
 fi
 
-# ─── 7. wpa_supplicant P2P configuration ─────────────────────────────────────
-info "Configuring wpa_supplicant for Wi-Fi Direct P2P (country: ${WIFI_COUNTRY})…"
-WIFI_COUNTRY="${WIFI_COUNTRY}" INSTALL_LOG="${INSTALL_LOG}" bash "${REPO_DIR}/scripts/setup_wpa_supplicant.sh"
+# Similarly, disable the standalone wpa_supplicant@wlan0 service if it was
+# left enabled by a previous install to avoid conflicting with NM.
+if systemctl is-enabled --quiet wpa_supplicant@wlan0 2>/dev/null; then
+    systemctl stop    wpa_supplicant@wlan0 2>/dev/null || true
+    systemctl disable wpa_supplicant@wlan0 2>/dev/null || true
+    info "Disabled standalone wpa_supplicant@wlan0 service (hybrid mode uses NM's instance)."
+fi
 
 # ─── 8. dnsmasq: prevent it from overriding system DNS ───────────────────────
 info "Disabling system-wide dnsmasq service (NicoCast runs its own instance)…"
@@ -227,8 +241,10 @@ echo "  • Toggle mode:      sudo toggle-mode.sh  (hybrid ↔ performance)"
 echo ""
 warn "NicoCast is running in HYBRID mode (NetworkManager stays active)."
 warn "Your SSH/Wi-Fi connection is preserved."
-warn "For lower video latency, switch to performance mode once you no longer need SSH:"
+warn "NicoCast advertises itself as a Miracast sink via the existing wpa_supplicant."
+warn "For lower video latency, switch to performance mode (wlan0 dedicated to P2P):"
 warn "  sudo toggle-mode.sh"
+warn "  NOTE: performance mode will disconnect you from Wi-Fi/SSH until you toggle back."
 echo ""
 warn "On your Android device, open Smart View (or any Miracast app)"
 warn "and look for '$(grep device_name ${CONFIG_DIR}/nicocast.conf | awk -F= '{print $2}' | xargs)'."
